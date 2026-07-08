@@ -1,0 +1,82 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Referral local server</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; max-width: 860px; margin: 40px auto; padding: 0 20px; color: #1a1a1a; }
+  h1 { font-size: 20px; }
+  h2 { font-size: 15px; color: #555; margin-top: 32px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #eee; }
+  th { color: #888; font-weight: 600; }
+  code { background: #f2f2f2; padding: 1px 5px; border-radius: 4px; }
+  .consumed { color: #2a9d5c; }
+  .pending { color: #999; }
+  button, input { font-size: 13px; padding: 6px 10px; }
+  #genResult { margin-top: 10px; font-size: 13px; }
+  .empty { color: #999; font-size: 13px; }
+</style>
+</head>
+<body>
+  <h1>🔗 Referral local server</h1>
+  <p style="color:#666; font-size:13px;">Matches by requester IP within a 60-minute window, using screen size + timezone as extra confidence signals when available. Point a device's Safari at <code>/r/&lt;code&gt;</code> to simulate an invite-link tap, then launch the app on that same device.</p>
+
+  <h2>Generate a test invite link</h2>
+  <input id="tokenInput" placeholder="any fake token, e.g. test-user-1" size="24">
+  <button onclick="generate()">Generate</button>
+  <div id="genResult"></div>
+
+  <h2>Recent clicks</h2>
+  <table id="clicksTable"><thead><tr><th>Code</th><th>IP</th><th>Screen</th><th>Timezone</th><th>Status</th><th>At</th></tr></thead><tbody></tbody></table>
+  <div class="empty" id="clicksEmpty" style="display:none;">No clicks logged yet.</div>
+
+  <h2>Issued codes</h2>
+  <table id="codesTable"><thead><tr><th>Token</th><th>Code</th><th>At</th></tr></thead><tbody></tbody></table>
+  <div class="empty" id="codesEmpty" style="display:none;">No codes issued yet.</div>
+
+  <h2>Reset</h2>
+  <button onclick="reset()">Wipe all test data</button>
+
+<script>
+async function generate() {
+  const token = document.getElementById('tokenInput').value.trim() || 'test-user-1';
+  const res = await fetch('/customers/referral', { headers: { Authorization: 'Bearer ' + token } });
+  const data = await res.json();
+  const link = data.referral_link;
+  document.getElementById('genResult').innerHTML =
+    'Code <code>' + data.referral_code + '</code> — link: <a href="' + link + '" target="_blank">' + link + '</a>';
+  refresh();
+}
+
+async function reset() {
+  await fetch('/debug/reset', { method: 'POST' });
+  refresh();
+}
+
+async function refresh() {
+  const res = await fetch('/api/state');
+  const { clicks, codes } = await res.json();
+
+  const clicksBody = document.querySelector('#clicksTable tbody');
+  clicksBody.innerHTML = clicks.map(c =>
+    '<tr><td><code>' + c.referral_code + '</code></td><td>' + c.ip + '</td>' +
+    '<td>' + (c.screen_width ? (c.screen_width + '×' + c.screen_height) : '—') + '</td>' +
+    '<td>' + (c.timezone || '—') + '</td>' +
+    '<td class="' + (c.consumed ? 'consumed' : 'pending') + '">' + (c.consumed ? 'matched' : 'pending') + '</td>' +
+    '<td>' + c.created_at + '</td></tr>'
+  ).join('');
+  document.getElementById('clicksEmpty').style.display = clicks.length ? 'none' : 'block';
+
+  const codesBody = document.querySelector('#codesTable tbody');
+  codesBody.innerHTML = codes.map(c =>
+    '<tr><td>' + c.token + '</td><td><code>' + c.referral_code + '</code></td><td>' + c.created_at + '</td></tr>'
+  ).join('');
+  document.getElementById('codesEmpty').style.display = codes.length ? 'none' : 'block';
+}
+
+refresh();
+setInterval(refresh, 3000);
+</script>
+</body>
+</html>
