@@ -23,8 +23,9 @@
   <p style="color:#666; font-size:13px;">
     Mirrors the real API contract: <code>/v2/group-merchants/{slug}/customers/referral</code> and
     <code>/v2/group-merchants/{slug}/customers/referrals/claim</code>. Exact match via App Clip / Android
-    referrer code, falling back to hashed IP + platform + Accept-Language fingerprinting on iOS
-    when no code is available — same as the documented production behavior.
+    referrer code, falling back to hashed IP + platform + Accept-Language + screen size fingerprinting
+    on iOS when no code is available. Settings: <span id="settingsSource">—</span>. DeviceCheck backup:
+    <span id="dcBadge">—</span>.
   </p>
 
   <h2>1. Generate a referral link (as the referrer)</h2>
@@ -44,6 +45,9 @@
   <input id="claimMerchantInput" placeholder="merchant slug" size="14">
   <input id="claimCodeInput" placeholder="referral_code (leave blank to test fingerprint fallback)" size="30">
   <input id="claimDeviceInput" placeholder="x-soo-device-id (optional)" size="20">
+  <br>
+  <input id="claimWidthInput" placeholder="screen_width (optional)" size="16">
+  <input id="claimHeightInput" placeholder="screen_height (optional)" size="16">
   <br><br>
   <button onclick="claim()">POST /customers/referrals/claim</button>
   <div id="claimResult"></div>
@@ -53,7 +57,7 @@
   <div class="empty" id="codesEmpty" style="display:none;">No codes issued yet.</div>
 
   <h2>Clicks (fingerprint signal)</h2>
-  <table id="clicksTable"><thead><tr><th>Code</th><th>Merchant</th><th>Platform</th><th>IP hash</th><th>Language</th><th>Consumed</th><th>At</th></tr></thead><tbody></tbody></table>
+  <table id="clicksTable"><thead><tr><th>Code</th><th>Merchant</th><th>Platform</th><th>IP hash</th><th>Language</th><th>Screen</th><th>Consumed</th><th>At</th></tr></thead><tbody></tbody></table>
   <div class="empty" id="clicksEmpty" style="display:none;">No clicks yet.</div>
 
   <h2>Claims</h2>
@@ -88,6 +92,12 @@ async function claim() {
   const merchant = document.getElementById('claimMerchantInput').value.trim() || 'vcc';
   const code = document.getElementById('claimCodeInput').value.trim();
   const deviceId = document.getElementById('claimDeviceInput').value.trim();
+  const width = document.getElementById('claimWidthInput').value.trim();
+  const height = document.getElementById('claimHeightInput').value.trim();
+  const body = {};
+  if (code) body.referral_code = code;
+  if (width) body.screen_width = Number(width);
+  if (height) body.screen_height = Number(height);
   const res = await fetch(`/v2/group-merchants/${merchant}/customers/referrals/claim`, {
     method: 'POST',
     headers: {
@@ -96,7 +106,7 @@ async function claim() {
       'Accept-Language': 'en-US,en;q=0.9',
       'x-soo-device-id': deviceId,
     },
-    body: JSON.stringify(code ? { referral_code: code } : {}),
+    body: JSON.stringify(body),
   });
   const data = await res.json();
   document.getElementById('claimResult').textContent = JSON.stringify(data);
@@ -110,7 +120,11 @@ async function reset() {
 
 async function refresh() {
   const res = await fetch('/api/state');
-  const { codes, clicks, claims } = await res.json();
+  const { codes, clicks, claims, device_check_enabled, settings_api_base } = await res.json();
+
+  document.getElementById('settingsSource').textContent = settings_api_base;
+  const dcBadge = document.getElementById('dcBadge');
+  dcBadge.textContent = device_check_enabled ? 'enabled' : 'disabled';
 
   const codesBody = document.querySelector('#codesTable tbody');
   codesBody.innerHTML = codes.map(c =>
@@ -122,6 +136,7 @@ async function refresh() {
   clicksBody.innerHTML = clicks.map(c =>
     '<tr><td><code>' + c.code + '</code></td><td>' + c.merchant_slug + '</td><td>' + c.platform + '</td>' +
     '<td>' + c.ip_hash.slice(0, 10) + '…</td><td>' + (c.accept_language || '—') + '</td>' +
+    '<td>' + (c.screen_width ? (c.screen_width + '×' + c.screen_height) : '—') + '</td>' +
     '<td class="' + (c.consumed ? 'no' : 'yes') + '">' + (c.consumed ? 'used' : 'available') + '</td><td>' + c.created_at + '</td></tr>'
   ).join('');
   document.getElementById('clicksEmpty').style.display = clicks.length ? 'none' : 'block';
