@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <title>Referral server</title>
 <style>
-  body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; max-width: 860px; margin: 40px auto; padding: 0 20px; color: #1a1a1a; }
+  body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; max-width: 900px; margin: 40px auto; padding: 0 20px; color: #1a1a1a; }
   h1 { font-size: 20px; }
   h2 { font-size: 15px; color: #555; margin-top: 32px; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -12,49 +12,94 @@
   th { color: #888; font-weight: 600; }
   code { background: #f2f2f2; padding: 1px 5px; border-radius: 4px; }
   button, input { font-size: 13px; padding: 6px 10px; }
-  #genResult { margin-top: 10px; font-size: 13px; }
+  #genResult, #claimResult { margin-top: 10px; font-size: 13px; }
   .empty { color: #999; font-size: 13px; }
-  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 12px; }
-  .on { background: #dcf5e3; color: #1c7a37; }
-  .off { background: #f2f2f2; color: #888; }
+  .yes { color: #1c7a37; }
+  .no { color: #999; }
 </style>
 </head>
 <body>
   <h1>🔗 Referral server</h1>
   <p style="color:#666; font-size:13px;">
-    Exact matching via App Clip / Universal Link invocation — no IP or device fingerprinting.
-    DeviceCheck: <span id="dcBadge" class="badge off">—</span>
+    Mirrors the real API contract: <code>/v2/group-merchants/{slug}/customers/referral</code> and
+    <code>/v2/group-merchants/{slug}/customers/referrals/claim</code>. Exact match via App Clip / Android
+    referrer code, falling back to hashed IP + platform + Accept-Language fingerprinting on iOS
+    when no code is available — same as the documented production behavior.
   </p>
 
-  <h2>Generate a test invite link</h2>
-  <input id="tokenInput" placeholder="any fake token, e.g. test-user-1" size="22">
+  <h2>1. Generate a referral link (as the referrer)</h2>
+  <input id="tokenInput" placeholder="referrer token, e.g. alice" size="18">
   <input id="merchantInput" placeholder="merchant slug, e.g. vcc" size="16">
-  <button onclick="generate()">Generate</button>
+  <button onclick="generate()">GET /customers/referral</button>
   <div id="genResult"></div>
+
+  <h2>2. Simulate a tap on that link</h2>
+  <input id="tapCodeInput" placeholder="code, e.g. AB2CD9FG" size="18">
+  <input id="tapMerchantInput" placeholder="merchant slug" size="16">
+  <button onclick="simulateTap()">GET /r/:slug/:code</button>
+  <div id="tapResult"></div>
+
+  <h2>3. Claim (as the referee, simulating first launch)</h2>
+  <input id="claimTokenInput" placeholder="referee token, e.g. bob" size="16">
+  <input id="claimMerchantInput" placeholder="merchant slug" size="14">
+  <input id="claimCodeInput" placeholder="referral_code (leave blank to test fingerprint fallback)" size="30">
+  <input id="claimDeviceInput" placeholder="x-soo-device-id (optional)" size="20">
+  <br><br>
+  <button onclick="claim()">POST /customers/referrals/claim</button>
+  <div id="claimResult"></div>
 
   <h2>Issued codes</h2>
   <table id="codesTable"><thead><tr><th>Code</th><th>Merchant</th><th>Owner token</th><th>At</th></tr></thead><tbody></tbody></table>
   <div class="empty" id="codesEmpty" style="display:none;">No codes issued yet.</div>
 
-  <h2>Redemptions</h2>
-  <table id="redemptionsTable"><thead><tr><th>Code</th><th>Merchant</th><th>Device token</th><th>At</th></tr></thead><tbody></tbody></table>
-  <div class="empty" id="redemptionsEmpty" style="display:none;">No redemptions yet.</div>
+  <h2>Clicks (fingerprint signal)</h2>
+  <table id="clicksTable"><thead><tr><th>Code</th><th>Merchant</th><th>Platform</th><th>IP hash</th><th>Language</th><th>Consumed</th><th>At</th></tr></thead><tbody></tbody></table>
+  <div class="empty" id="clicksEmpty" style="display:none;">No clicks yet.</div>
+
+  <h2>Claims</h2>
+  <table id="claimsTable"><thead><tr><th>Merchant</th><th>Customer token</th><th>Code</th><th>Via</th><th>Device id</th><th>At</th></tr></thead><tbody></tbody></table>
+  <div class="empty" id="claimsEmpty" style="display:none;">No claims yet.</div>
 
   <h2>Reset</h2>
   <button onclick="reset()">Wipe all test data</button>
 
 <script>
 async function generate() {
-  const token = document.getElementById('tokenInput').value.trim() || 'test-user-1';
+  const token = document.getElementById('tokenInput').value.trim() || 'alice';
   const merchant = document.getElementById('merchantInput').value.trim() || 'vcc';
-  const res = await fetch('/customers/referral?merchant=' + encodeURIComponent(merchant), { headers: { Authorization: 'Bearer ' + token } });
+  const res = await fetch(`/v2/group-merchants/${merchant}/customers/referral`, { headers: { Authorization: 'Bearer ' + token } });
   const data = await res.json();
-  if (!res.ok) {
-    document.getElementById('genResult').textContent = 'Error: ' + (data.error || res.status);
-    return;
-  }
-  document.getElementById('genResult').innerHTML =
-    'Code <code>' + data.referral_code + '</code> — link: <a href="' + data.referral_link + '" target="_blank">' + data.referral_link + '</a>';
+  document.getElementById('genResult').innerHTML = res.ok
+    ? 'Code <code>' + data.code + '</code> — link: <a href="' + data.share_url + '" target="_blank">' + data.share_url + '</a>'
+    : 'Error: ' + (data.error || res.status);
+  refresh();
+}
+
+async function simulateTap() {
+  const code = document.getElementById('tapCodeInput').value.trim();
+  const merchant = document.getElementById('tapMerchantInput').value.trim() || 'vcc';
+  const res = await fetch(`/r/${merchant}/${code}`, { redirect: 'manual' });
+  document.getElementById('tapResult').textContent = 'Click logged (redirect status ' + res.status + '/opaqueredirect — that\'s expected from the browser fetch API).';
+  refresh();
+}
+
+async function claim() {
+  const token = document.getElementById('claimTokenInput').value.trim() || 'bob';
+  const merchant = document.getElementById('claimMerchantInput').value.trim() || 'vcc';
+  const code = document.getElementById('claimCodeInput').value.trim();
+  const deviceId = document.getElementById('claimDeviceInput').value.trim();
+  const res = await fetch(`/v2/group-merchants/${merchant}/customers/referrals/claim`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: 'Bearer ' + token,
+      'Accept-Language': 'en-US,en;q=0.9',
+      'x-soo-device-id': deviceId,
+    },
+    body: JSON.stringify(code ? { referral_code: code } : {}),
+  });
+  const data = await res.json();
+  document.getElementById('claimResult').textContent = JSON.stringify(data);
   refresh();
 }
 
@@ -65,11 +110,7 @@ async function reset() {
 
 async function refresh() {
   const res = await fetch('/api/state');
-  const { codes, redemptions, device_check_enabled, merchant_count } = await res.json();
-
-  const dcBadge = document.getElementById('dcBadge');
-  dcBadge.textContent = device_check_enabled ? 'enabled' : 'disabled (local dedup)';
-  dcBadge.className = 'badge ' + (device_check_enabled ? 'on' : 'off');
+  const { codes, clicks, claims } = await res.json();
 
   const codesBody = document.querySelector('#codesTable tbody');
   codesBody.innerHTML = codes.map(c =>
@@ -77,11 +118,20 @@ async function refresh() {
   ).join('');
   document.getElementById('codesEmpty').style.display = codes.length ? 'none' : 'block';
 
-  const redemptionsBody = document.querySelector('#redemptionsTable tbody');
-  redemptionsBody.innerHTML = redemptions.map(r =>
-    '<tr><td><code>' + r.referral_code + '</code></td><td>' + r.merchant_slug + '</td><td>' + r.device_token + '</td><td>' + r.created_at + '</td></tr>'
+  const clicksBody = document.querySelector('#clicksTable tbody');
+  clicksBody.innerHTML = clicks.map(c =>
+    '<tr><td><code>' + c.code + '</code></td><td>' + c.merchant_slug + '</td><td>' + c.platform + '</td>' +
+    '<td>' + c.ip_hash.slice(0, 10) + '…</td><td>' + (c.accept_language || '—') + '</td>' +
+    '<td class="' + (c.consumed ? 'no' : 'yes') + '">' + (c.consumed ? 'used' : 'available') + '</td><td>' + c.created_at + '</td></tr>'
   ).join('');
-  document.getElementById('redemptionsEmpty').style.display = redemptions.length ? 'none' : 'block';
+  document.getElementById('clicksEmpty').style.display = clicks.length ? 'none' : 'block';
+
+  const claimsBody = document.querySelector('#claimsTable tbody');
+  claimsBody.innerHTML = claims.map(c =>
+    '<tr><td>' + c.merchant_slug + '</td><td>' + c.customer_token + '</td><td><code>' + c.referral_code + '</code></td>' +
+    '<td>' + c.matched_via + '</td><td>' + (c.device_id || '—') + '</td><td>' + c.created_at + '</td></tr>'
+  ).join('');
+  document.getElementById('claimsEmpty').style.display = claims.length ? 'none' : 'block';
 }
 
 refresh();

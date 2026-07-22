@@ -1,0 +1,62 @@
+{
+  "_default": {
+    "enabled": true,
+    "referrer": {
+      "uuid": "00000000000TEST",
+      "type": "referral_referrer",
+      "is_active": true,
+      "get": "points",
+      "nb_points": 50,
+      "updated_at": "2026-07-20T00:00:00.000000Z"
+    },
+    "referee": {
+      "uuid": "00000000001TEST",
+      "type": "referral_referee",
+      "is_active": true,
+      "get": "discount",
+      "discount_type": "amount",
+      "discount_amount": 500,
+      "discount_max_amount": null,
+      "discount_min_amount": null,
+      "updated_at": "2026-07-20T00:00:00.000000Z"
+    },
+    "order": null
+  },
+  "vccsandbox": {
+    "enabled": true,
+    "referrer": {
+      "uuid": "6A5E0F4259A31",
+      "type": "referral_referrer",
+      "is_active": true,
+      "get": "discount",
+      "discount_type": "amount",
+      "discount_amount": 1900,
+      "discount_max_amount": null,
+      "discount_min_amount": null,
+      "updated_at": "2026-07-20T14:16:28.000000Z"
+    },
+    "referee": {
+      "uuid": "6A5E0F433DFD1",
+      "type": "referral_referee",
+      "is_active": true,
+      "get": "points",
+      "nb_points": 70,
+      "updated_at": "2026-07-20T12:06:27.000000Z"
+    },
+    "order": {
+      "uuid": "6A5E1357BD3E6",
+      "type": "referral_order",
+      "is_active": true,
+      "purchase_fixed_points": null,
+      "purchase_usd_value": 1,
+      "calc_method": "total",
+      "order_source": {
+        "kiosk": false,
+        "website": true,
+        "branded_app": true,
+        "in_store": false
+      },
+      "updated_at": "2026-07-20T14:16:47.000000Z"
+    }
+  }
+}
