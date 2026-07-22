@@ -46,12 +46,28 @@ const AASA = {
   },
 };
 
-// ── Referral settings — live from the real sandbox backend ───────────────────
+// ── Referral settings — live from the real backend ───────────────────────────
 // Fetched from the actual API (no auth required for this endpoint), not a
-// local mirror that can drift out of sync. Falls back to sensible test values
-// for slugs that don't exist there (our merchants.json has 464 fake test
-// merchants; only real ones like vccsandbox actually resolve).
-const SETTINGS_API_BASE = process.env.SETTINGS_API_BASE || 'https://api-v2-sandbox.smartonlineorders.com';
+// local mirror that can drift out of sync. vccsandbox is looked up on the
+// sandbox host; every other slug in merchants.json is a REAL merchant of this
+// business (confirmed: e.g. tropicalbungal resolves to the actual Tropical
+// Bungalow restaurant, with its real App Store link and settings) — looked up
+// on the production host. Most of them just don't have the referral program
+// configured yet (they only have the older rewards/loyalty array), which is
+// why almost everything currently comes back as { enabled: false } — that's
+// the correct real answer, not a fallback.
+//
+// NOTE: PROD_SETTINGS_API_BASE is exactly what was given — 'smartonlineorder.com'
+// (no "s", no "-v2"), unlike the sandbox host and the doc's own examples,
+// which both use "smartonlineorders.com"/"api-v2". Confirmed working (both
+// spellings resolve and return identical data for "vcc"), so likely a valid
+// alias rather than a typo — but flagging since it's inconsistent with
+// everything else we've been given.
+const SANDBOX_SETTINGS_API_BASE = process.env.SANDBOX_SETTINGS_API_BASE || 'https://api-v2-sandbox.smartonlineorders.com';
+const PROD_SETTINGS_API_BASE = process.env.PROD_SETTINGS_API_BASE || 'https://api.smartonlineorder.com';
+function settingsApiBaseFor(slug) {
+  return slug === 'vccsandbox' ? SANDBOX_SETTINGS_API_BASE : PROD_SETTINGS_API_BASE;
+}
 const SETTINGS_CACHE_TTL_MS = 60_000;
 const settingsCache = new Map(); // slug -> { value, expiresAt }
 
@@ -68,14 +84,20 @@ async function settingsFor(slug) {
     return cached.value;
   }
 
+  // Two different "no data" cases, handled differently:
+  //  - the fetch itself fails (network error, or a slug genuinely unknown to
+  //    the backend) → use the enabled test default, so local testing isn't
+  //    blocked by e.g. no internet access.
+  //  - the merchant resolves fine but simply has no referral config yet (true
+  //    for almost every real merchant right now) → that's "no program row"
+  //    per the spec, i.e. disabled. Defaulting it to an enabled test program
+  //    with fake reward values would be actively misleading.
   let value = DEFAULT_REFERRAL_SETTINGS;
   try {
-    const res = await fetch(`${SETTINGS_API_BASE}/v2/group-merchants/${encodeURIComponent(slug)}`);
+    const res = await fetch(`${settingsApiBaseFor(slug)}/v2/group-merchants/${encodeURIComponent(slug)}`);
     if (res.ok) {
       const data = await res.json();
-      if (data && data.settings && data.settings.referral) {
-        value = data.settings.referral;
-      }
+      value = (data && data.settings && data.settings.referral) || { enabled: false };
     }
   } catch (err) {
     console.error(`settingsFor(${slug}): live fetch failed, using default —`, err.message);
@@ -483,7 +505,8 @@ app.get('/api/state', (req, res) => {
     claims: recentClaims.all(),
     merchant_count: Object.keys(merchants).length,
     device_check_enabled: DEVICE_CHECK_ENABLED,
-    settings_api_base: SETTINGS_API_BASE,
+    settings_api_base_sandbox: SANDBOX_SETTINGS_API_BASE,
+    settings_api_base_prod: PROD_SETTINGS_API_BASE,
   });
 });
 
@@ -501,7 +524,7 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`\n🔗 Referral server running (mirrors /v2/group-merchants/{slug}/... contract)`);
   console.log(`   Dashboard:        http://localhost:${PORT}`);
   console.log(`   Public domain:    https://${PUBLIC_DOMAIN}`);
-  console.log(`   Settings source:  ${SETTINGS_API_BASE} (live, cached ${SETTINGS_CACHE_TTL_MS / 1000}s, default fallback)`);
+  console.log(`   Settings source:  vccsandbox -> ${SANDBOX_SETTINGS_API_BASE}, everything else -> ${PROD_SETTINGS_API_BASE} (cached ${SETTINGS_CACHE_TTL_MS / 1000}s, default fallback)`);
   console.log(`   Merchants loaded: ${Object.keys(merchants).length} (AASA size: ${aasaSize} bytes / 128000 max)`);
   console.log(`   DeviceCheck:      ${DEVICE_CHECK_ENABLED ? 'enabled (backup check)' : 'disabled'}\n`);
 });

@@ -120,9 +120,9 @@ async function reset() {
 
 async function refresh() {
   const res = await fetch('/api/state');
-  const { codes, clicks, claims, device_check_enabled, settings_api_base } = await res.json();
+  const { codes, clicks, claims, device_check_enabled, settings_api_base_sandbox, settings_api_base_prod } = await res.json();
 
-  document.getElementById('settingsSource').textContent = settings_api_base;
+  document.getElementById('settingsSource').textContent = `vccsandbox→${settings_api_base_sandbox}, else→${settings_api_base_prod}`;
   const dcBadge = document.getElementById('dcBadge');
   dcBadge.textContent = device_check_enabled ? 'enabled' : 'disabled';
 
