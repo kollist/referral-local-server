@@ -46,7 +46,11 @@ const AASA = {
 // storage does.
 const DEVICE_CHECK_KEY_ID = process.env.DEVICE_CHECK_KEY_ID || '';
 const DEVICE_CHECK_TEAM_ID = process.env.DEVICE_CHECK_TEAM_ID || TEAM_ID;
-const DEVICE_CHECK_PRIVATE_KEY = process.env.DEVICE_CHECK_PRIVATE_KEY || '';
+// Prefer a file path (keeps the multi-line PEM out of env var / .htaccess SetEnv
+// awkwardness); DEVICE_CHECK_PRIVATE_KEY as a raw inline PEM string still works too.
+const DEVICE_CHECK_PRIVATE_KEY = process.env.DEVICE_CHECK_PRIVATE_KEY_PATH
+  ? fs.readFileSync(process.env.DEVICE_CHECK_PRIVATE_KEY_PATH, 'utf8')
+  : (process.env.DEVICE_CHECK_PRIVATE_KEY || '');
 const DEVICE_CHECK_ENABLED = Boolean(DEVICE_CHECK_KEY_ID && DEVICE_CHECK_PRIVATE_KEY);
 
 function base64url(input) {
@@ -97,12 +101,26 @@ function callDeviceCheck(pathName, body) {
 async function isFreshDevice(deviceToken) {
   const timestamp = Date.now();
   const query = await callDeviceCheck('query_two_bits', { device_token: deviceToken, transaction_id: crypto.randomUUID(), timestamp });
+
+  // Apple returns 200 with an empty body the first time a genuine device_token
+  // is seen (no bits set yet) — that's the only case that means "fresh". Any
+  // other status (400 = malformed/invalid token, 401 = bad JWT, etc.) must
+  // reject rather than silently pass, or a garbage device_token would sail
+  // through as "fresh" and defeat the whole point of this check.
+  if (query.status !== 200) {
+    throw new Error(`DeviceCheck query_two_bits rejected the token: HTTP ${query.status} ${query.body}`);
+  }
+
   let bit0 = false;
-  if (query.status === 200 && query.body) {
-    try { bit0 = Boolean(JSON.parse(query.body).bit0); } catch { /* Apple returns empty body when no bits are set yet */ }
+  if (query.body) {
+    bit0 = Boolean(JSON.parse(query.body).bit0);
   }
   if (bit0) return false;
-  await callDeviceCheck('update_two_bits', { device_token: deviceToken, transaction_id: crypto.randomUUID(), timestamp, bit0: true, bit1: false });
+
+  const update = await callDeviceCheck('update_two_bits', { device_token: deviceToken, transaction_id: crypto.randomUUID(), timestamp, bit0: true, bit1: false });
+  if (update.status !== 200) {
+    throw new Error(`DeviceCheck update_two_bits failed: HTTP ${update.status} ${update.body}`);
+  }
   return true;
 }
 
