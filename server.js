@@ -340,9 +340,17 @@ app.get('/r/:slug/:code', (req, res) => {
   }
 
   const appStoreUrl = `https://apps.apple.com/app/${APP_BUNDLE_PREFIX}.${merchants[slug]}`;
+  const clipBundleId = `${APP_BUNDLE_PREFIX}.${merchants[slug]}.Clip`;
+  const FALLBACK_DELAY_MS = 6000;
   res.send(`
-    <html><body style="font-family: -apple-system, sans-serif; padding: 40px; text-align: center;">
-      <p>Redirecting…</p>
+    <html>
+    <head>
+      <meta name="apple-itunes-app" content="app-clip-bundle-id=${clipBundleId}, app-clip-display=card">
+    </head>
+    <body style="font-family: -apple-system, sans-serif; padding: 40px; text-align: center;">
+      <p id="status">If a card just appeared at the top of Safari, tap it to open the App Clip.<br>
+      Otherwise, continuing to the App Store in <span id="countdown">${FALLBACK_DELAY_MS / 1000}</span>s…</p>
+      <p><a id="manual-link" href="${appStoreUrl}">Continue now</a></p>
       <script>
         fetch('/r/${slug}/${code}/log', {
           method: 'POST',
@@ -351,7 +359,19 @@ app.get('/r/:slug/:code', (req, res) => {
             screen_width: Math.round(screen.width * (window.devicePixelRatio || 1)),
             screen_height: Math.round(screen.height * (window.devicePixelRatio || 1)),
           }),
-        }).finally(() => { window.location.href = '${appStoreUrl}'; });
+        }).catch(() => {});
+
+        const deadline = Date.now() + ${FALLBACK_DELAY_MS};
+        const countdownEl = document.getElementById('countdown');
+        const tick = setInterval(() => {
+          const secondsLeft = Math.ceil((deadline - Date.now()) / 1000);
+          if (secondsLeft <= 0) {
+            clearInterval(tick);
+            window.location.href = '${appStoreUrl}';
+          } else {
+            countdownEl.textContent = secondsLeft;
+          }
+        }, 250);
       </script>
     </body></html>
   `);
