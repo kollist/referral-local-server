@@ -2,92 +2,279 @@
 <html>
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Referral server</title>
 <style>
-  body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; max-width: 900px; margin: 40px auto; padding: 0 20px; color: #1a1a1a; }
-  h1 { font-size: 20px; }
-  h2 { font-size: 15px; color: #555; margin-top: 32px; }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #eee; }
-  th { color: #888; font-weight: 600; }
-  code { background: #f2f2f2; padding: 1px 5px; border-radius: 4px; }
-  button, input { font-size: 13px; padding: 6px 10px; }
-  #genResult, #claimResult { margin-top: 10px; font-size: 13px; }
-  .empty { color: #999; font-size: 13px; }
-  .yes { color: #1c7a37; }
-  .no { color: #999; }
+  :root {
+    --bg: #f5f6f8;
+    --surface: #ffffff;
+    --border: #e4e6ea;
+    --text: #1a1a1a;
+    --text-dim: #6b7280;
+    --text-faint: #9ca3af;
+    --accent: #2563eb;
+    --accent-soft: #eef2ff;
+    --good: #15803d;
+    --good-soft: #ecfdf3;
+    --bad: #b91c1c;
+    --bad-soft: #fef2f2;
+    --neutral-soft: #f3f4f6;
+    --code-bg: #f1f2f4;
+    --shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #101114;
+      --surface: #17181c;
+      --border: #2a2c31;
+      --text: #e8e9eb;
+      --text-dim: #9aa0aa;
+      --text-faint: #6b7078;
+      --accent: #5b8dff;
+      --accent-soft: #1a2340;
+      --good: #4ade80;
+      --good-soft: #0f2618;
+      --bad: #f87171;
+      --bad-soft: #2a1414;
+      --neutral-soft: #202226;
+      --code-bg: #1e2024;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.4);
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    margin: 0;
+    padding: 32px 20px 64px;
+  }
+  .page { max-width: 1080px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+
+  header.top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  header.top h1 { font-size: 19px; margin: 0; display: flex; align-items: center; gap: 8px; }
+  .status-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 12px; font-weight: 500; padding: 4px 10px; border-radius: 999px;
+    background: var(--neutral-soft); color: var(--text-dim); border: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  .pill .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-faint); }
+  .pill.on .dot { background: var(--good); }
+  .pill.off .dot { background: var(--text-faint); }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    padding: 20px 22px;
+  }
+  .card-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 14px; }
+  .card-head h2 { font-size: 14px; margin: 0; color: var(--text); }
+  .card-head .sub { font-size: 12px; color: var(--text-faint); }
+  .contract-note { font-size: 12.5px; color: var(--text-dim); line-height: 1.6; margin: 0 0 4px; }
+  .contract-note code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  @media (max-width: 860px) { .steps { grid-template-columns: 1fr; } }
+  .step {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px 16px;
+    display: flex; flex-direction: column; gap: 8px;
+    background: var(--bg);
+  }
+  .step .num {
+    width: 20px; height: 20px; border-radius: 50%;
+    background: var(--accent-soft); color: var(--accent);
+    font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+  }
+  .step .title-row { display: flex; align-items: center; gap: 8px; }
+  .step .title { font-size: 13px; font-weight: 600; }
+  .step .endpoint { font-size: 11px; color: var(--text-faint); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .step .fields { display: flex; flex-direction: column; gap: 6px; margin-top: 2px; }
+  .step .fields.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  input {
+    font-size: 13px; padding: 7px 9px; border-radius: 7px;
+    border: 1px solid var(--border); background: var(--surface); color: var(--text);
+    width: 100%; font-family: inherit;
+  }
+  input::placeholder { color: var(--text-faint); }
+  input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  button {
+    font-size: 12.5px; font-weight: 600; padding: 8px 12px; border-radius: 7px;
+    border: 1px solid var(--accent); background: var(--accent); color: #fff;
+    cursor: pointer; font-family: inherit;
+  }
+  button:hover { filter: brightness(1.08); }
+  button:active { filter: brightness(0.95); }
+  button.ghost {
+    background: transparent; color: var(--text-dim); border-color: var(--border);
+  }
+  button.danger { background: var(--bad); border-color: var(--bad); }
+  .result {
+    margin-top: 2px; font-size: 12.5px; padding: 8px 10px; border-radius: 7px;
+    background: var(--neutral-soft); color: var(--text-dim); word-break: break-all;
+    min-height: 34px; display: none;
+  }
+  .result.show { display: block; }
+  .result.ok { background: var(--good-soft); color: var(--good); }
+  .result.err { background: var(--bad-soft); color: var(--bad); }
+  .result a { color: inherit; font-weight: 600; }
+  code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+
+  .data-grid { display: flex; flex-direction: column; gap: 14px; }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  th { color: var(--text-faint); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; }
+  tbody tr:hover { background: var(--neutral-soft); }
+  .empty { color: var(--text-faint); font-size: 12.5px; padding: 14px 2px; }
+  .badge { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600; padding: 2px 8px; border-radius: 999px; }
+  .badge.yes { background: var(--good-soft); color: var(--good); }
+  .badge.no { background: var(--neutral-soft); color: var(--text-faint); }
+  .via-badge { font-size: 11px; padding: 2px 7px; border-radius: 6px; background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .count { font-size: 11.5px; font-weight: 600; color: var(--text-faint); background: var(--neutral-soft); border-radius: 999px; padding: 2px 8px; }
+
+  footer.reset-row { display: flex; align-items: center; justify-content: space-between; }
+  footer.reset-row p { font-size: 12px; color: var(--text-faint); margin: 0; }
 </style>
 </head>
 <body>
-  <h1>🔗 Referral server</h1>
-  <p style="color:#666; font-size:13px;">
-    Mirrors the real API contract: <code>/v2/group-merchants/{slug}/customers/referral</code> and
-    <code>/v2/group-merchants/{slug}/customers/referrals/claim</code>. Exact match via App Clip / Android
-    referrer code, falling back to hashed IP + platform + Accept-Language + screen size fingerprinting
-    on iOS when no code is available. Settings: <span id="settingsSource">—</span>. DeviceCheck backup:
-    <span id="dcBadge">—</span>.
-  </p>
+<div class="page">
 
-  <h2>1. Generate a referral link (as the referrer)</h2>
-  <input id="tokenInput" placeholder="referrer token, e.g. alice" size="18">
-  <input id="merchantInput" placeholder="merchant slug, e.g. vcc" size="16">
-  <button onclick="generate()">GET /customers/referral</button>
-  <div id="genResult"></div>
+  <header class="top">
+    <h1>🔗 Referral server</h1>
+    <div class="status-row">
+      <span class="pill" id="settingsPill"><span class="dot"></span><span id="settingsSource">settings —</span></span>
+      <span class="pill" id="dcPill"><span class="dot"></span><span id="dcBadge">DeviceCheck —</span></span>
+      <span class="pill"><span class="dot" style="background:var(--good)"></span>auto-refresh 3s</span>
+    </div>
+  </header>
 
-  <h2>2. Simulate a tap on that link</h2>
-  <input id="tapCodeInput" placeholder="code, e.g. AB2CD9FG" size="18">
-  <input id="tapMerchantInput" placeholder="merchant slug" size="16">
-  <button onclick="simulateTap()">GET /r/:slug/:code</button>
-  <div id="tapResult"></div>
+  <div class="card">
+    <p class="contract-note">
+      Mirrors the real API contract: <code>/v2/group-merchants/{slug}/customers/referral</code> and
+      <code>/v2/group-merchants/{slug}/customers/referrals/claim</code>. Exact match via App Clip / Android
+      referrer code, falling back to hashed IP + platform + Accept-Language + screen size fingerprinting
+      on iOS when no code is available.
+    </p>
+  </div>
 
-  <h2>3. Claim (as the referee, simulating first launch)</h2>
-  <input id="claimTokenInput" placeholder="referee token, e.g. bob" size="16">
-  <input id="claimMerchantInput" placeholder="merchant slug" size="14">
-  <input id="claimCodeInput" placeholder="referral_code (leave blank to test fingerprint fallback)" size="30">
-  <input id="claimDeviceInput" placeholder="x-soo-device-id (optional)" size="20">
-  <br>
-  <input id="claimWidthInput" placeholder="screen_width (optional)" size="16">
-  <input id="claimHeightInput" placeholder="screen_height (optional)" size="16">
-  <br><br>
-  <button onclick="claim()">POST /customers/referrals/claim</button>
-  <div id="claimResult"></div>
+  <div class="card">
+    <div class="card-head"><h2>Simulate the referral flow</h2><span class="sub">referrer → link tap → referee claim</span></div>
+    <div class="steps">
 
-  <h2>Issued codes</h2>
-  <table id="codesTable"><thead><tr><th>Code</th><th>Merchant</th><th>Owner token</th><th>At</th></tr></thead><tbody></tbody></table>
-  <div class="empty" id="codesEmpty" style="display:none;">No codes issued yet.</div>
+      <div class="step">
+        <div class="title-row"><span class="num">1</span><span class="title">Generate a link</span></div>
+        <span class="endpoint">GET /customers/referral</span>
+        <div class="fields">
+          <input id="tokenInput" placeholder="referrer token, e.g. alice">
+          <input id="merchantInput" placeholder="merchant slug, e.g. vcc">
+        </div>
+        <button onclick="generate()">Run</button>
+        <div class="result" id="genResult"></div>
+      </div>
 
-  <h2>Clicks (fingerprint signal)</h2>
-  <table id="clicksTable"><thead><tr><th>Code</th><th>Merchant</th><th>Platform</th><th>IP hash</th><th>Language</th><th>Screen</th><th>Consumed</th><th>At</th></tr></thead><tbody></tbody></table>
-  <div class="empty" id="clicksEmpty" style="display:none;">No clicks yet.</div>
+      <div class="step">
+        <div class="title-row"><span class="num">2</span><span class="title">Simulate a tap</span></div>
+        <span class="endpoint">GET /r/:slug/:code</span>
+        <div class="fields">
+          <input id="tapCodeInput" placeholder="code, e.g. AB2CD9FG">
+          <input id="tapMerchantInput" placeholder="merchant slug">
+        </div>
+        <button onclick="simulateTap()">Run</button>
+        <div class="result" id="tapResult"></div>
+      </div>
 
-  <h2>Claims</h2>
-  <table id="claimsTable"><thead><tr><th>Merchant</th><th>Customer token</th><th>Code</th><th>Via</th><th>Device id</th><th>At</th></tr></thead><tbody></tbody></table>
-  <div class="empty" id="claimsEmpty" style="display:none;">No claims yet.</div>
+      <div class="step">
+        <div class="title-row"><span class="num">3</span><span class="title">Claim as referee</span></div>
+        <span class="endpoint">POST /customers/referrals/claim</span>
+        <div class="fields">
+          <input id="claimTokenInput" placeholder="referee token, e.g. bob">
+          <input id="claimMerchantInput" placeholder="merchant slug">
+          <input id="claimCodeInput" placeholder="referral_code (blank = test fingerprint fallback)">
+          <input id="claimDeviceInput" placeholder="x-soo-device-id (optional)">
+          <div class="fields row2">
+            <input id="claimWidthInput" placeholder="screen_width">
+            <input id="claimHeightInput" placeholder="screen_height">
+          </div>
+        </div>
+        <button onclick="claim()">Run</button>
+        <div class="result" id="claimResult"></div>
+      </div>
 
-  <h2>Reset</h2>
-  <button onclick="reset()">Wipe all test data</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h2>Issued codes</h2><span class="count" id="codesCount">0</span></div>
+    <div class="table-wrap">
+      <table id="codesTable"><thead><tr><th>Code</th><th>Merchant</th><th>Owner token</th><th>At</th></tr></thead><tbody></tbody></table>
+    </div>
+    <div class="empty" id="codesEmpty" style="display:none;">No codes issued yet — run step 1 above.</div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h2>Clicks</h2><span class="sub">fingerprint signal</span><span class="count" id="clicksCount">0</span></div>
+    <div class="table-wrap">
+      <table id="clicksTable"><thead><tr><th>Code</th><th>Merchant</th><th>Platform</th><th>IP hash</th><th>Language</th><th>Screen</th><th>Status</th><th>At</th></tr></thead><tbody></tbody></table>
+    </div>
+    <div class="empty" id="clicksEmpty" style="display:none;">No clicks yet — run step 2 above.</div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h2>Claims</h2><span class="count" id="claimsCount">0</span></div>
+    <div class="table-wrap">
+      <table id="claimsTable"><thead><tr><th>Merchant</th><th>Customer token</th><th>Code</th><th>Via</th><th>Device id</th><th>At</th></tr></thead><tbody></tbody></table>
+    </div>
+    <div class="empty" id="claimsEmpty" style="display:none;">No claims yet — run step 3 above.</div>
+  </div>
+
+  <footer class="reset-row card">
+    <p>Wipes referral_codes, clicks, and claims. Merchant config is untouched.</p>
+    <button class="danger" onclick="reset()">Wipe all test data</button>
+  </footer>
+
+</div>
 
 <script>
+function setResult(el, ok, html) {
+  el.className = 'result show ' + (ok ? 'ok' : 'err');
+  el.innerHTML = html;
+}
+
 async function generate() {
+  const el = document.getElementById('genResult');
   const token = document.getElementById('tokenInput').value.trim() || 'alice';
   const merchant = document.getElementById('merchantInput').value.trim() || 'vcc';
   const res = await fetch(`/v2/group-merchants/${merchant}/customers/referral`, { headers: { Authorization: 'Bearer ' + token } });
   const data = await res.json();
-  document.getElementById('genResult').innerHTML = res.ok
+  setResult(el, res.ok, res.ok
     ? 'Code <code>' + data.code + '</code> — link: <a href="' + data.share_url + '" target="_blank">' + data.share_url + '</a>'
-    : 'Error: ' + (data.error || res.status);
+    : 'Error: ' + (data.error || res.status));
   refresh();
 }
 
 async function simulateTap() {
+  const el = document.getElementById('tapResult');
   const code = document.getElementById('tapCodeInput').value.trim();
   const merchant = document.getElementById('tapMerchantInput').value.trim() || 'vcc';
   const res = await fetch(`/r/${merchant}/${code}`, { redirect: 'manual' });
-  document.getElementById('tapResult').textContent = 'Click logged (redirect status ' + res.status + '/opaqueredirect — that\'s expected from the browser fetch API).';
+  setResult(el, true, 'Click logged (redirect status ' + res.status + '/opaqueredirect — expected from a browser fetch).');
   refresh();
 }
 
 async function claim() {
+  const el = document.getElementById('claimResult');
   const token = document.getElementById('claimTokenInput').value.trim() || 'bob';
   const merchant = document.getElementById('claimMerchantInput').value.trim() || 'vcc';
   const code = document.getElementById('claimCodeInput').value.trim();
@@ -109,11 +296,12 @@ async function claim() {
     body: JSON.stringify(body),
   });
   const data = await res.json();
-  document.getElementById('claimResult').textContent = JSON.stringify(data);
+  setResult(el, !!data.attributed, JSON.stringify(data));
   refresh();
 }
 
 async function reset() {
+  if (!confirm('Wipe all issued codes, clicks, and claims?')) return;
   await fetch('/debug/reset', { method: 'POST' });
   refresh();
 }
@@ -123,30 +311,38 @@ async function refresh() {
   const { codes, clicks, claims, device_check_enabled, settings_api_base_sandbox, settings_api_base_prod } = await res.json();
 
   document.getElementById('settingsSource').textContent = `vccsandbox→${settings_api_base_sandbox}, else→${settings_api_base_prod}`;
-  const dcBadge = document.getElementById('dcBadge');
-  dcBadge.textContent = device_check_enabled ? 'enabled' : 'disabled';
+  const dcPill = document.getElementById('dcPill');
+  dcPill.classList.toggle('on', device_check_enabled);
+  dcPill.classList.toggle('off', !device_check_enabled);
+  document.getElementById('dcBadge').textContent = 'DeviceCheck ' + (device_check_enabled ? 'enabled' : 'disabled');
 
+  document.getElementById('codesCount').textContent = codes.length;
   const codesBody = document.querySelector('#codesTable tbody');
   codesBody.innerHTML = codes.map(c =>
     '<tr><td><code>' + c.code + '</code></td><td>' + c.merchant_slug + '</td><td>' + c.owner_token + '</td><td>' + c.created_at + '</td></tr>'
   ).join('');
   document.getElementById('codesEmpty').style.display = codes.length ? 'none' : 'block';
+  document.getElementById('codesTable').style.display = codes.length ? '' : 'none';
 
+  document.getElementById('clicksCount').textContent = clicks.length;
   const clicksBody = document.querySelector('#clicksTable tbody');
   clicksBody.innerHTML = clicks.map(c =>
     '<tr><td><code>' + c.code + '</code></td><td>' + c.merchant_slug + '</td><td>' + c.platform + '</td>' +
     '<td>' + c.ip_hash.slice(0, 10) + '…</td><td>' + (c.accept_language || '—') + '</td>' +
     '<td>' + (c.screen_width ? (c.screen_width + '×' + c.screen_height) : '—') + '</td>' +
-    '<td class="' + (c.consumed ? 'no' : 'yes') + '">' + (c.consumed ? 'used' : 'available') + '</td><td>' + c.created_at + '</td></tr>'
+    '<td><span class="badge ' + (c.consumed ? 'no' : 'yes') + '">' + (c.consumed ? 'used' : 'available') + '</span></td><td>' + c.created_at + '</td></tr>'
   ).join('');
   document.getElementById('clicksEmpty').style.display = clicks.length ? 'none' : 'block';
+  document.getElementById('clicksTable').style.display = clicks.length ? '' : 'none';
 
+  document.getElementById('claimsCount').textContent = claims.length;
   const claimsBody = document.querySelector('#claimsTable tbody');
   claimsBody.innerHTML = claims.map(c =>
     '<tr><td>' + c.merchant_slug + '</td><td>' + c.customer_token + '</td><td><code>' + c.referral_code + '</code></td>' +
-    '<td>' + c.matched_via + '</td><td>' + (c.device_id || '—') + '</td><td>' + c.created_at + '</td></tr>'
+    '<td><span class="via-badge">' + c.matched_via + '</span></td><td>' + (c.device_id || '—') + '</td><td>' + c.created_at + '</td></tr>'
   ).join('');
   document.getElementById('claimsEmpty').style.display = claims.length ? 'none' : 'block';
+  document.getElementById('claimsTable').style.display = claims.length ? '' : 'none';
 }
 
 refresh();
